@@ -4,8 +4,8 @@
   (reduce + coll))
 
 (defn count-increases [coll]
-  (sum (map (fn [x y] (if (< x y) 1 0))
-            (partition 2 1 coll))))
+  (count (filter (partial apply <)
+                 (partition 2 1 coll))))
 
 (defn moving-sum [n coll]
   (map sum (partition n 1 coll)))
@@ -16,10 +16,11 @@
                         (clojure.string/split-lines)
                         (map #(Integer/parseInt %))))]
     (println (count-increases integers))
-    (println (count-increases (map sum (moving-sum 3 integers))))))
+    (println (count-increases (moving-sum 3 integers)))))
 
 (let [functions [problem1]]
   (defn -main
     "Main entry point"
     []
-    (println ((get functions (- (Integer/parseInt (read-line)) 1))))))
+    (println "Enter problem to solve: ")
+    ((get functions (- (Integer/parseInt (read-line)) 1)))))
