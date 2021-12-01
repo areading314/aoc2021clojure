@@ -1,20 +1,14 @@
 (ns clojuretest.core)
 
-(defn zip [& colls]
-  (apply map vector colls))
-
 (defn sum [coll]
   (reduce + coll))
 
 (defn count-increases [coll]
-  (reduce + (map (fn [x y] (if (< x y) 1 0))
-                 (drop-last 1 coll)
-                 (drop 1 coll))))
+  (sum (map (fn [x y] (if (< x y) 1 0))
+            (partition 2 1 coll))))
 
-(defn measure-3 [coll]
-  (map sum (zip (drop-last 2 coll)
-                (drop-last 1 (drop 1 coll))
-                (drop 2 coll))))
+(defn moving-sum [n coll]
+  (map sum (partition n 1 coll)))
 
 (defn problem1 []
   (let [integers (vec (->>
@@ -22,9 +16,7 @@
                         (clojure.string/split-lines)
                         (map #(Integer/parseInt %))))]
     (println (count-increases integers))
-    (println (count-increases (measure-3 integers)))
-    )
-  )
+    (println (count-increases (map sum (moving-sum 3 integers))))))
 
 (let [functions [problem1]]
   (defn -main
