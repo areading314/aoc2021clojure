@@ -66,40 +66,40 @@
   (Integer/parseInt binstring 2))
 
 (defn combine-bin-array [c a]
-  (vec (map (fn [cc aa] (if (= aa "1") (+ cc 1) cc)) c a)))
-
+  (vec (map (fn [cc aa] (if aa (+ cc 1) cc)) c a)))
 
 (defn most-common [arrs tiebreaker op]
   (let [total-count (count arrs)
         one-count (reduce combine-bin-array (vec (repeat (count (get arrs 0)) 0)) arrs)
         zero-count (vec (map #(- total-count %) one-count))]
     (vec (map (fn [zc oc] (cond (= zc oc) tiebreaker
-                                (op zc oc) "0"
-                                (op oc zc) "1")) zero-count one-count))))
+                                (op zc oc) false
+                                (op oc zc) true)) zero-count one-count))))
 
 (defn find-best-prefix-match [arrs idx tiebreaker op]
   (if (<= (count arrs) 1)
     (get arrs 0)
-    (let [mc (most-common arrs tiebreaker op)
-          newarrs (vec (filter #(= (get % idx) (get mc idx)) arrs))]
+    (let [mc (get (most-common arrs tiebreaker op) idx)
+          newarrs (vec (filter #(= (get % idx) mc) arrs))]
       (find-best-prefix-match newarrs (+ idx 1) tiebreaker op))))
 
-(def arr-to-int (comp bin-to-int #(clojure.string/join "" %)))
+(defn str-to-boolarray [str]
+  (vec (map (partial = "1") (clojure.string/split str #""))))
 
-(defn calc-epsgamma [inputs]
-  (let [arrs (vec (map #(clojure.string/split % #"") inputs))
-        gamma (arr-to-int (most-common arrs "1" >))
-        epsilon (arr-to-int (most-common arrs "0" <))
-        oxygen-rating (arr-to-int (find-best-prefix-match arrs 0 "1" >))
-        co2-scrubber-rating (arr-to-int (find-best-prefix-match arrs 0 "0" <))]
+(defn arr-to-int [arr]
+  (->> arr (map #(if % "1" "0")) (clojure.string/join "") (bin-to-int)))
+
+(defn calc-epsgamma [arrs]
+  (let [gamma (arr-to-int (most-common arrs true >))
+        epsilon (arr-to-int (most-common arrs false <))
+        oxygen-rating (arr-to-int (find-best-prefix-match arrs 0 true >))
+        co2-scrubber-rating (arr-to-int (find-best-prefix-match arrs 0 false <))]
     (println (* gamma epsilon))
-    (println (* oxygen-rating co2-scrubber-rating)))
-  )
-
+    (println (* oxygen-rating co2-scrubber-rating))))
 
 (defn problem3 [input]
-  (->> input (clojure.string/split-lines) calc-epsgamma))
-
+  (->> input (clojure.string/split-lines)
+       (map str-to-boolarray) (vec) (calc-epsgamma)))
 
 (let [functions [problem1
                  problem2
