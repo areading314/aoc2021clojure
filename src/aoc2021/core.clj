@@ -145,25 +145,38 @@
 (defn get-unmarked-squares [board moves]
   (filter #(not (scontains? (vec moves) %)) (flatten board)))
 
+
 (defn score-bingo [board moves]
   (let [current-move (last moves)]
     (if (check-bingo board moves)
      (* current-move (sum (get-unmarked-squares board moves))) 0)))
 
-(defn play-bingo [move boards moves]
-    (or (first (filter #(> % 0) (map #(score-bingo % (take move moves)) boards)))
-        (play-bingo (inc move) boards moves)))
+(defn is-winning? [board moves]
+  (> (score-bingo board moves) 0))
 
-(defn lose-bingo [move boards moves last-board]
-  (let [win-board (or (first (filter #(> % 0)
-                                     (map #(score-bingo % (take move moves)) boards)))
-                      last-board)]
-    (if (or (= (count boards) 0) (> move (count moves)))
-      win-board
-      (lose-bingo (inc move)
-                  (filterv #(= (score-bingo % (take move moves)) 0) boards)
-                  moves
-                  win-board))))
+(def is-not-winning? (complement is-winning?))
+
+(defn winning-scores [boards moves]
+  (->> boards
+       (map #(score-bingo % moves))
+      (filter #(< 0 %)))
+  )
+
+(defn losing-games [boards moves]
+  (filter #(is-not-winning? % moves) boards))
+
+(defn play-bingo [move boards moves]
+  (let [current-moves (take move moves)]
+   (or (first (winning-scores boards current-moves))
+       (play-bingo (inc move) boards moves))))
+
+(defn lose-bingo [move boards moves last-win-score]
+  (let [current-moves (take move moves)
+        win-score (or (first (winning-scores boards current-moves))
+                      last-win-score)]
+    (if (> move (count moves))
+      win-score
+      (lose-bingo (inc move) (losing-games boards current-moves) moves win-score))))
 
 (defn problem4 [input]
   (let [lines (vec (clojure.string/split-lines input))
@@ -171,10 +184,8 @@
     (println (play-bingo 1 boards moves))
     (println (lose-bingo 1 boards moves nil))))
 
-(let [functions [problem1
-                 problem2
-                 problem3
-                 problem4]]
+(let [functions [problem1 problem2
+                 problem3 problem4]]
   (defn -main
     "Main entry point"
     []
