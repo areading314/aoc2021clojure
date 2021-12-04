@@ -1,15 +1,22 @@
 (ns aoc2021.core
   (:require [clj-http.client :as client]))
 
-(defn sum [coll]
-  (reduce + coll))
+(defn sum [coll] (reduce + coll))
+
+(defn get-input-cache-filename [year puzzle-number]
+  (clojure.string/join "/" [(System/getenv "AOC_INPUT_CACHE_DIR")
+                            (format "input%s.problem%s" year puzzle-number)]))
 
 (defn get-puzzle-input [year puzzle-number]
-  (let [session-cookie (format "session=%s" (slurp (System/getenv "AOC_COOKIE_FILE")))]
-    (get (client/get
-           (format "https://adventofcode.com/%s/day/%s/input" year puzzle-number)
-           {:headers {:cookie session-cookie}})
-         :body)))
+  (let [cached-file (get-input-cache-filename year puzzle-number)]
+    (if (.exists (clojure.java.io/file cached-file))
+      (slurp cached-file)
+      (let [session-cookie (format "session=%s" (slurp (System/getenv "AOC_COOKIE_FILE")))
+            download-input (get (client/get
+                                  (format "https://adventofcode.com/%s/day/%s/input" year puzzle-number)
+                                  {:headers {:cookie session-cookie}}) :body)]
+        (spit cached-file download-input)
+        download-input))))
 
 (defn count-increases [coll]
   (count (filter (partial apply <)
