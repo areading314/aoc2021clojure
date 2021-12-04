@@ -15,8 +15,7 @@
             download-input (get (client/get
                                   (format "https://adventofcode.com/%s/day/%s/input" year puzzle-number)
                                   {:headers {:cookie session-cookie}}) :body)]
-        (spit cached-file download-input)
-        download-input))))
+        (spit cached-file download-input) download-input))))
 
 (defn count-increases [coll]
   (count (filter (partial apply <)
@@ -25,7 +24,7 @@
 (defn moving-sum [n coll]
   (map sum (partition n 1 coll)))
 
-(defn parse-int [s] (Integer/parseInt s))
+(defn parse-int [s] (Long/parseLong s))
 
 (defn problem1 [input]
   (let [integers (->>
@@ -108,9 +107,74 @@
   (->> input (clojure.string/split-lines)
        (map str-to-boolarray) (vec) (calc-epsgamma)))
 
+(defn read-board [boardinput]
+  (vec (map #(vec (map parse-int (clojure.string/split (clojure.string/trim %) #"\s+"))) boardinput)))
+
+(defn transpose [m] (apply mapv vector m))
+
+(defn read-problem4-input
+  "Reads a collection of lines and returns a map of bingo numbers and boards"
+  [input]
+  (let [moves (map parse-int (clojure.string/split (get input 0) #","))
+        boards (map read-board (partition 5 6 (drop 2 input)))]
+    {:moves (vec moves) :boards (vec boards)}))
+
+(defn any-true? [coll]
+  (or (some identity coll) false))
+
+(defn every-true? [coll]
+  (every? identity coll))
+
+(defn scontains? [coll k]
+  (any-true? (map (partial = k) coll)))
+
+(defn apply-bingo-moves [board moves]
+  (mapv (fn [r] (mapv #(scontains? moves %) r)) board))
+
+(defn diag [m]
+  (map #(get (get m %) %) (range (count m))))
+
+(defn check-bingo [board moves]
+  (let [truthmap (apply-bingo-moves board moves)
+        horizonal (any-true? (map every-true? truthmap))
+        vertical (any-true? (map every-true? (transpose truthmap)))
+        diag1 (every? identity (diag truthmap))
+        diag2 (every? identity (diag (transpose truthmap)))]
+    (or horizonal vertical diag1 diag2)))
+
+(defn get-unmarked-squares [board moves]
+  (filter #(not (scontains? (vec moves) %)) (flatten board)))
+
+(defn score-bingo [board moves]
+  (let [current-move (last moves)]
+    (if (check-bingo board moves)
+     (* current-move (sum (get-unmarked-squares board moves))) 0)))
+
+(defn play-bingo [move boards moves]
+    (or (first (filter #(> % 0) (map #(score-bingo % (take move moves)) boards)))
+        (play-bingo (inc move) boards moves)))
+
+(defn lose-bingo [move boards moves last-board]
+  (let [win-board (or (first (filter #(> % 0)
+                                     (map #(score-bingo % (take move moves)) boards)))
+                      last-board)]
+    (if (or (= (count boards) 0) (> move (count moves)))
+      win-board
+      (lose-bingo (inc move)
+                  (filterv #(= (score-bingo % (take move moves)) 0) boards)
+                  moves
+                  win-board))))
+
+(defn problem4 [input]
+  (let [lines (vec (clojure.string/split-lines input))
+        {boards :boards moves :moves} (read-problem4-input lines)]
+    (println (play-bingo 1 boards moves))
+    (println (lose-bingo 1 boards moves nil))))
+
 (let [functions [problem1
                  problem2
-                 problem3]]
+                 problem3
+                 problem4]]
   (defn -main
     "Main entry point"
     []
