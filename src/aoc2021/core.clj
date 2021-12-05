@@ -138,8 +138,8 @@
   (let [truthmap (apply-bingo-moves board moves)
         horizonal (any-true? (map every-true? truthmap))
         vertical (any-true? (map every-true? (transpose truthmap)))
-        diag1 (every? identity (diag truthmap))
-        diag2 (every? identity (diag (transpose truthmap)))]
+        diag1 (every-true? (diag truthmap))
+        diag2 (every-true? (diag (transpose truthmap)))]
     (or horizonal vertical diag1 diag2)))
 
 (defn get-unmarked-squares [board moves]
@@ -149,7 +149,7 @@
 (defn score-bingo [board moves]
   (let [current-move (last moves)]
     (if (check-bingo board moves)
-     (* current-move (sum (get-unmarked-squares board moves))) 0)))
+      (* current-move (sum (get-unmarked-squares board moves))) 0)))
 
 (defn is-winning? [board moves]
   (> (score-bingo board moves) 0))
@@ -159,16 +159,15 @@
 (defn winning-scores [boards moves]
   (->> boards
        (map #(score-bingo % moves))
-      (filter #(< 0 %)))
-  )
+       (filter #(< 0 %))))
 
 (defn losing-games [boards moves]
   (filter #(is-not-winning? % moves) boards))
 
 (defn play-bingo [move boards moves]
   (let [current-moves (take move moves)]
-   (or (first (winning-scores boards current-moves))
-       (play-bingo (inc move) boards moves))))
+    (or (first (winning-scores boards current-moves))
+        (play-bingo (inc move) boards moves))))
 
 (defn lose-bingo [move boards moves last-win-score]
   (let [current-moves (take move moves)
@@ -184,10 +183,62 @@
     (println (play-bingo 1 boards moves))
     (println (lose-bingo 1 boards moves nil))))
 
-(let [functions [problem1 problem2
-                 problem3 problem4]]
+(defn parse-line [line-input]
+  (let [[p1-input p2-input] (clojure.string/split line-input #" -> ")
+        [x1 y1] (mapv parse-int (clojure.string/split p1-input #","))
+        [x2 y2] (mapv parse-int (clojure.string/split p2-input #","))]
+    [x1 y1 x2 y2]))
+
+(defn between [x lower upper]
+  (if (upper < lower)
+    (between x upper lower)
+    (and (>= x lower) (<= x upper))))
+
+(defn abs [n] (max n (- n)))
+
+(defn diag-dir [x1 y1 x2 y2]
+  (> (* (- y2 y1) (- x2 x1)) 0))
+
+(defn gen-line-coords [x1 y1 x2 y2 include-diag?]
+    (cond
+     (= x1 x2) (mapv #(vector x1 %) (range (min y1 y2) (inc (max y1 y2))))
+     (= y1 y2) (mapv #(vector % y1) (range (min x1 x2) (inc (max x1 x2))))
+     (not include-diag?) []
+     (diag-dir x1 y1 x2 y2) (mapv #(vector (+ (min x1 x2) %1) (+ (min y1 y2) %1)) (range (inc (abs (- x2 x1)))))
+     :else (mapv #(vector (+ (min x1 x2) %1) (- (max y1 y2) %1)) (range (inc (abs (- x2 x1)))))))
+
+(defn add-coord-to-grid [grid coord]
+  (assoc-in grid coord (inc (get-in grid coord))))
+
+(defn draw-line [canvas segment include-diag?]
+  (let [[x1 y1 x2 y2] segment
+        line-coords (gen-line-coords x1 y1 x2 y2 include-diag?)]
+    (reduce add-coord-to-grid canvas line-coords)))
+
+(def draw-line-no-diag #(draw-line %1 %2 false))
+(def draw-line-diag #(draw-line %1 %2 true))
+
+(defn count-danger-coords [line-map]
+  (count (filter (partial < 1) (flatten line-map))))
+
+(defn init-grid [size-x size-y val]
+  (vec (repeat size-y (vec (repeat size-x val)))))
+
+(defn problem5 [input]
+  (let [line-input (clojure.string/split-lines input)
+        segments (mapv parse-line line-input)
+        problem-size (inc (reduce max (flatten segments)))
+        ocean-grid (init-grid problem-size problem-size 0)
+        line-map (reduce draw-line-no-diag ocean-grid segments)
+        line-map-diag (reduce draw-line-diag ocean-grid segments)
+        danger-count (count-danger-coords line-map)
+        danger-count-diag (count-danger-coords line-map-diag)]
+    (println danger-count)
+    (println danger-count-diag)))
+
+(let [functions [problem1 problem2 problem3 problem4
+                 problem5]]
   (defn -main
-    "Main entry point"
     []
     (print "Enter problem to solve: ")
     (flush)
