@@ -189,23 +189,26 @@
         [x2 y2] (mapv parse-int (clojure.string/split p2-input #","))]
     [x1 y1 x2 y2]))
 
-(defn between [x lower upper]
-  (if (upper < lower)
-    (between x upper lower)
-    (and (>= x lower) (<= x upper))))
+(defn between [x a b]
+  (if (b < a)
+    (between x b a)
+    (and (>= x a) (<= x b))))
 
 (defn abs [n] (max n (- n)))
 
 (defn diag-dir [x1 y1 x2 y2]
   (> (* (- y2 y1) (- x2 x1)) 0))
 
+(defn abs-range [a b]
+  (range (min a b) (inc (max a b))))
+
 (defn gen-line-coords [x1 y1 x2 y2 include-diag?]
-    (cond
-     (= x1 x2) (mapv #(vector x1 %) (range (min y1 y2) (inc (max y1 y2))))
-     (= y1 y2) (mapv #(vector % y1) (range (min x1 x2) (inc (max x1 x2))))
-     (not include-diag?) []
-     (diag-dir x1 y1 x2 y2) (mapv #(vector (+ (min x1 x2) %1) (+ (min y1 y2) %1)) (range (inc (abs (- x2 x1)))))
-     :else (mapv #(vector (+ (min x1 x2) %1) (- (max y1 y2) %1)) (range (inc (abs (- x2 x1)))))))
+  (cond
+    (= x1 x2) (mapv #(vector x1 %) (abs-range y1 y2))
+    (= y1 y2) (mapv #(vector % y1) (abs-range x1 x2))
+    (not include-diag?) []
+    (diag-dir x1 y1 x2 y2) (mapv #(vector (+ (min x1 x2) %1) (+ (min y1 y2) %1)) (range (inc (abs (- x2 x1)))))
+    :else (mapv #(vector (+ (min x1 x2) %1) (- (max y1 y2) %1)) (range (inc (abs (- x2 x1)))))))
 
 (defn add-coord-to-grid [grid coord]
   (assoc-in grid coord (inc (get-in grid coord))))
@@ -224,6 +227,12 @@
 (defn init-grid [size-x size-y val]
   (vec (repeat size-y (vec (repeat size-x val)))))
 
+(defn show-count [c]
+  (if (= c 0) "." (str c)))
+
+(defn print-counts [count-grid]
+  (doall (map #(println (clojure.string/join (map show-count %))) count-grid)))
+
 (defn problem5 [input]
   (let [line-input (clojure.string/split-lines input)
         segments (mapv parse-line line-input)
@@ -236,8 +245,30 @@
     (println danger-count)
     (println danger-count-diag)))
 
+(defn lrotate [v n]
+  (vec (concat (subvec v n (count v)) (subvec v 0 n))))
+
+(defn sim-lanternfish [lanternfish-map]
+  (let [new-fish (get lanternfish-map 0)
+        new-map (lrotate lanternfish-map 1)]
+    (assoc new-map 6 (+ new-fish (get new-map 6)))))
+
+(defn parse-lanternfish [input]
+  (let [fish-timers (map parse-int (clojure.string/split input #","))
+        freqs (frequencies fish-timers)]
+    (mapv #(or (get freqs %) 0) (range 9))))
+
+(defn lanternfish-simulation [l n]
+  (if (= n 0) l (lanternfish-simulation (sim-lanternfish l) (dec n))))
+
+(defn problem6 [input]
+  (let [lanternfish (parse-lanternfish (clojure.string/trim input))]
+    (println (sum (lanternfish-simulation lanternfish 80)))
+    (println (sum (lanternfish-simulation lanternfish 256)))))
+
+
 (let [functions [problem1 problem2 problem3 problem4
-                 problem5]]
+                 problem5 problem6]]
   (defn -main
     []
     (print "Enter problem to solve: ")
