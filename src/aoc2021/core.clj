@@ -249,22 +249,19 @@
   (vec (concat (subvec v n (count v)) (subvec v 0 n))))
 
 (defn sim-lanternfish [lanternfish-map]
-  (let [new-fish (get lanternfish-map 0)
-        new-map (lrotate lanternfish-map 1)]
-    (assoc new-map 6 (+ new-fish (get new-map 6)))))
+  (let [new-fish (get lanternfish-map 0)]
+    (update (lrotate lanternfish-map 1) 6 + new-fish)))
 
 (defn parse-lanternfish [input]
-  (let [fish-timers (map parse-int (clojure.string/split input #","))
-        freqs (frequencies fish-timers)]
-    (mapv #(or (get freqs %) 0) (range 9))))
+  (let [fish-timers (map parse-int (clojure.string/split input #","))]
+    (mapv #(or (get (frequencies fish-timers) %) 0) (range 9))))
 
-(defn lanternfish-simulation [l n]
-  (if (= n 0) l (lanternfish-simulation (sim-lanternfish l) (dec n))))
+(defn get-lanternfish-count [l n]
+  (sum (nth (iterate sim-lanternfish l) n)))
 
 (defn problem6 [input]
   (let [lanternfish (parse-lanternfish (clojure.string/trim input))]
-    (println (sum (lanternfish-simulation lanternfish 80)))
-    (println (sum (lanternfish-simulation lanternfish 256)))))
+    (doall (map #(println (get-lanternfish-count lanternfish %)) [80 256]))))
 
 
 (let [functions [problem1 problem2 problem3 problem4
