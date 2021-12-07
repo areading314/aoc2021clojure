@@ -1,11 +1,12 @@
 (ns aoc2021.core
-  (:require [clj-http.client :as client]))
+  (:require [clj-http.client :as client]
+            [clojure.string :as str]))
 
 (defn sum [coll] (reduce + coll))
 
 (defn get-input-cache-filename [year puzzle-number]
-  (clojure.string/join "/" [(System/getenv "AOC_INPUT_CACHE_DIR")
-                            (format "input%s.problem%s" year puzzle-number)]))
+  (str/join "/" [(System/getenv "AOC_INPUT_CACHE_DIR")
+                 (format "input%s.problem%s" year puzzle-number)]))
 
 (defn get-puzzle-input [year puzzle-number]
   (let [cached-file (get-input-cache-filename year puzzle-number)]
@@ -29,7 +30,7 @@
 (defn problem1 [input]
   (let [integers (->>
                    input
-                   (clojure.string/split-lines)
+                   (str/split-lines)
                    (map parse-int))]
     (println (count-increases integers))
     (println (count-increases (moving-sum 3 integers)))))
@@ -43,7 +44,7 @@
           (+ (get p1 :x) (get p2 :x))))
 
 (defn parse-movement [movement-string]
-  (let [[dir-string distance-string] (clojure.string/split movement-string #" ")
+  (let [[dir-string distance-string] (str/split movement-string #" ")
         distance (parse-int distance-string)]
     (case dir-string
       "forward" (struct position 0 distance)
@@ -60,7 +61,7 @@
 (defn problem2 [input]
   (let [movements (->>
                     input
-                    (clojure.string/split-lines)
+                    (str/split-lines)
                     (map parse-movement))
         finalpos1 (reduce add-movements1 movements)
         finalpos2 (reduce add-movements2 (struct ship 0 0 0) movements)]
@@ -90,10 +91,10 @@
       (find-best-prefix-match newarrs (+ idx 1) tiebreaker op))))
 
 (defn str-to-boolarray [str]
-  (vec (map (partial = "1") (clojure.string/split str #""))))
+  (vec (map (partial = "1") (str/split str #""))))
 
 (defn arr-to-int [arr]
-  (->> arr (map #(if % "1" "0")) (clojure.string/join "") (bin-to-int)))
+  (->> arr (map #(if % "1" "0")) (str/join "") (bin-to-int)))
 
 (defn calc-epsgamma [arrs]
   (let [gamma (arr-to-int (most-common arrs true >))
@@ -104,18 +105,18 @@
     (println (* oxygen-rating co2-scrubber-rating))))
 
 (defn problem3 [input]
-  (->> input (clojure.string/split-lines)
+  (->> input (str/split-lines)
        (map str-to-boolarray) (vec) (calc-epsgamma)))
 
 (defn read-board [boardinput]
-  (vec (map #(vec (map parse-int (clojure.string/split (clojure.string/trim %) #"\s+"))) boardinput)))
+  (vec (map #(vec (map parse-int (str/split (str/trim %) #"\s+"))) boardinput)))
 
 (defn transpose [m] (apply mapv vector m))
 
 (defn read-problem4-input
   "Reads a collection of lines and returns a map of bingo numbers and boards"
   [input]
-  (let [moves (map parse-int (clojure.string/split (get input 0) #","))
+  (let [moves (map parse-int (str/split (get input 0) #","))
         boards (map read-board (partition 5 6 (drop 2 input)))]
     {:moves (vec moves) :boards (vec boards)}))
 
@@ -178,15 +179,15 @@
       (lose-bingo (inc move) (losing-games boards current-moves) moves win-score))))
 
 (defn problem4 [input]
-  (let [lines (vec (clojure.string/split-lines input))
+  (let [lines (vec (str/split-lines input))
         {boards :boards moves :moves} (read-problem4-input lines)]
     (println (play-bingo 1 boards moves))
     (println (lose-bingo 1 boards moves nil))))
 
 (defn parse-line [line-input]
-  (let [[p1-input p2-input] (clojure.string/split line-input #" -> ")
-        [x1 y1] (mapv parse-int (clojure.string/split p1-input #","))
-        [x2 y2] (mapv parse-int (clojure.string/split p2-input #","))]
+  (let [[p1-input p2-input] (str/split line-input #" -> ")
+        [x1 y1] (mapv parse-int (str/split p1-input #","))
+        [x2 y2] (mapv parse-int (str/split p2-input #","))]
     [x1 y1 x2 y2]))
 
 (defn between [x a b]
@@ -232,10 +233,10 @@
   (if (= c 0) "." (str c)))
 
 (defn print-counts [count-grid]
-  (doall (map #(println (clojure.string/join (map show-count %))) count-grid)))
+  (doall (map #(println (str/join (map show-count %))) count-grid)))
 
 (defn problem5 [input]
-  (let [line-input (clojure.string/split-lines input)
+  (let [line-input (str/split-lines input)
         segments (mapv parse-line line-input)
         problem-size (inc (reduce max (flatten segments)))
         ocean-grid (init-grid problem-size problem-size 0)
@@ -254,14 +255,14 @@
     (update (lrotate lanternfish-map 1) 6 + new-fish)))
 
 (defn parse-lanternfish [input]
-  (let [fish-timers (map parse-int (clojure.string/split input #","))]
+  (let [fish-timers (map parse-int (str/split input #","))]
     (mapv #(or (get (frequencies fish-timers) %) 0) (range 9))))
 
 (defn get-lanternfish-count [l n]
   (sum (nth (iterate sim-lanternfish l) n)))
 
 (defn problem6 [input]
-  (let [lanternfish (parse-lanternfish (clojure.string/trim input))]
+  (let [lanternfish (parse-lanternfish (str/trim input))]
     (doall (map #(println (get-lanternfish-count lanternfish %)) [80 256]))))
 
 (defn calc-fuel [ints c]
@@ -273,13 +274,17 @@
 (defn calc-fuel-crab [ints c]
   (sum (map #(triang-num (dist % c)) ints)))
 
+(defn find-min-fuel [ints fuel-func]
+  (let [maxint (reduce max ints)]
+    (reduce min (map #(fuel-func ints %) (range maxint)))))
+
 (defn problem7 [input]
-  (let [ints (mapv parse-int (clojure.string/split (clojure.string/trim input) #","))
-        maxint (reduce max ints)
-        result (reduce min (map #(calc-fuel ints %) (range maxint)))
-        result2 (reduce min (map #(calc-fuel-crab ints %) (range maxint)))]
-    (println result)
-    (println result2)))
+  (let [ints (as-> input s
+                   (str/trim s)
+                   (str/split s #",")
+                   (mapv parse-int s))]
+    (println (find-min-fuel ints calc-fuel))
+    (println (find-min-fuel ints calc-fuel-crab))))
 
 
 (let [functions [problem1 problem2 problem3 problem4
