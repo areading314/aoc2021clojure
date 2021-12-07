@@ -195,6 +195,7 @@
     (and (>= x a) (<= x b))))
 
 (defn abs [n] (max n (- n)))
+(defn dist [a b] (abs (- a b)))
 
 (defn diag-dir [x1 y1 x2 y2]
   (> (* (- y2 y1) (- x2 x1)) 0))
@@ -263,9 +264,26 @@
   (let [lanternfish (parse-lanternfish (clojure.string/trim input))]
     (doall (map #(println (get-lanternfish-count lanternfish %)) [80 256]))))
 
+(defn calc-fuel [ints c]
+  (sum (map #(dist % c) ints)))
+
+(defn triang-num [n]
+  (/ (* (inc n) n) 2))
+
+(defn calc-fuel-crab [ints c]
+  (sum (map #(triang-num (dist % c)) ints)))
+
+(defn problem7 [input]
+  (let [ints (mapv parse-int (clojure.string/split (clojure.string/trim input) #","))
+        maxint (reduce max ints)
+        result (reduce min (map #(calc-fuel ints %) (range maxint)))
+        result2 (reduce min (map #(calc-fuel-crab ints %) (range maxint)))]
+    (println result)
+    (println result2)))
+
 
 (let [functions [problem1 problem2 problem3 problem4
-                 problem5 problem6]]
+                 problem5 problem6 problem7]]
   (defn -main
     []
     (print "Enter problem to solve: ")
