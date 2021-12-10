@@ -286,9 +286,151 @@
     (println (find-min-fuel ints calc-fuel))
     (println (find-min-fuel ints calc-fuel-crab))))
 
+(defn get-freqs [strs]
+  (frequencies (flatten (map #(str/split % #"") strs))))
+
+(def freqstr-to-int
+  {"467889"  0
+   "89"      1
+   "47788"   2
+   "77889"   3
+   "6789"    4
+   "67789"   5
+   "467789"  6
+   "889"     7
+   "4677889" 8
+   "677889"  9})
+
+(defn str-to-freqstr [str freqs]
+  (str/join "" (sort (map freqs (str/split str #"")))))
+
+(defn normalize-str [str]
+  (str/join "" (sort (str/split str #""))))
+
+(defn mapping-from-strs [strs]
+  (let [sstrs (map normalize-str strs)
+        freqs (get-freqs sstrs)
+        freqstrs (map #(str-to-freqstr % freqs) sstrs)
+        ints (map freqstr-to-int freqstrs)]
+    (zipmap sstrs ints)))
+
+(defn decode-wires [observed code]
+  (let [translate-map (mapping-from-strs (map normalize-str observed))]
+    (str/join "" (map (comp translate-map normalize-str) code))))
+
+(defn split-ws [str]
+  (str/split str #"\s+"))
+
+(defn problem8 [input]
+  (let [unique-segments [2 3 4 7]
+        lines (str/split-lines (str/trim input))
+        grps (map #(str/split % #" \| ") lines)
+        info (map first grps)
+        nums (map second grps)
+        codes (map split-ws nums)
+        desired (filter #(some #{(count %)} unique-segments) (flatten codes))
+        infos (map split-ws info)
+        code-output (map (comp parse-int decode-wires) infos codes)]
+    (println (count desired))
+    (println (sum code-output))))
+
+
+(defn read-heightmap-row [s]
+  (mapv parse-int (str/split s #"")))
+
+(defn read-heightmap [input]
+  (mapv read-heightmap-row (str/split-lines (str/trim input))))
+
+(defn above [p]
+  (let [[x y] p]
+    [x (dec y)]))
+
+(defn below [p]
+  (let [[x y] p]
+    [x (inc y)]))
+
+(defn left [p]
+  (let [[x y] p]
+    [(dec x) y]))
+
+(defn right [p]
+  (let [[x y] p]
+    [(inc x) y]))
+
+(defn get-xy [m p]
+  (get-in m (reverse p)))
+
+(defn get-adjacent [m p]
+  (remove #(nil? (get-xy m %)) [(above p) (below p) (left p) (right p)]))
+
+(defn higher-adjacents [m p s]
+  (remove #(or (= 9 (get-xy m %)) (scontains? s %)) (get-adjacent m p)))
+
+(defn measure-basin [m p]
+  (loop [ps [p]
+         seen (set [])]
+    (let [current (first ps)
+          successors (higher-adjacents m current seen)
+          next-ps (concat (next ps) successors)
+          next-seen (conj seen current)]
+      (if (empty? next-ps)
+        (count next-seen)
+        (recur next-ps next-seen)))))
+
+(defn is-low-point? [m p]
+  (let [adjacents (get-adjacent m p)
+        adjacent-heights (map #(get-xy m %) adjacents)
+        non-nil-adjacents (remove nil? adjacent-heights)]
+    (every? #(< (get-xy m p) %) non-nil-adjacents)))
+
+(defn gen-points [width height]
+  (for [x (range width)
+        y (range height)] [x y]))
+
+(defn problem9 [input]
+  (let [height-map (read-heightmap input)
+        height (count height-map)
+        width (count (first height-map))
+        low-points (filter #(is-low-point? height-map %) (gen-points width height))
+        low-heights (map #(get-xy height-map %) low-points)]
+    (println (sum (map inc low-heights)))
+    (println (->> low-points (map #(measure-basin height-map %)) sort reverse (take 3) (reduce *))))
+  )
+
+(defn check-match [c stack]
+  (if (= c (first stack))
+    (next stack) c))
+
+(defn diagnose-char [stack c]
+  (if (string? stack)
+    stack
+    (case c
+      "(" (cons ")" stack) "[" (cons "]" stack)
+      "<" (cons ">" stack) "{" (cons "}" stack)
+      (check-match c stack)
+      ))
+  )
+
+(defn diagnose-line [line-seq]
+  (reduce diagnose-char (list) line-seq))
+
+(def char-score {")" 3 "]" 57 "}" 1197 ">" 25137})
+(defn middle [coll] (nth coll (/ (count coll) 2)))
+(def stack-scores {")" 1 "]" 2 "}" 3 ">" 4})
+(defn ssreduce [n e] (+ e (* 5 n)))
+(defn stack-score [stack]
+  (reduce ssreduce 0 (map stack-scores stack)))
+
+(defn problem10 [input]
+  (let [lines (str/split-lines (str/trim input))
+        seqs (map #(str/split % #"") lines)
+        diagnoses (map diagnose-line seqs)]
+    (println (sum (map char-score (filter string? diagnoses))))
+    (println (->> diagnoses (remove string?) (map stack-score) sort middle))))
 
 (let [functions [problem1 problem2 problem3 problem4
-                 problem5 problem6 problem7]]
+                 problem5 problem6 problem7 problem8
+                 problem9 problem10]]
   (defn -main
     []
     (print "Enter problem to solve: ")
