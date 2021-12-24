@@ -1,8 +1,12 @@
 (ns aoc2021.core
   (:require [clj-http.client :as client]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [shams.priority-queue :as pq]
+            [clojure.math.numeric-tower :as math]))
 
 (defn sum [coll] (reduce + coll))
+
+(defn str-to-chars [string] (str/split string #""))
 
 (defn get-input-cache-filename [year puzzle-number]
   (str/join "/" [(System/getenv "AOC_INPUT_CACHE_DIR")
@@ -341,27 +345,16 @@
 (defn read-heightmap [input]
   (mapv read-heightmap-row (str/split-lines (str/trim input))))
 
-(defn above [p]
-  (let [[x y] p]
-    [x (dec y)]))
-
-(defn below [p]
-  (let [[x y] p]
-    [x (inc y)]))
-
-(defn left [p]
-  (let [[x y] p]
-    [(dec x) y]))
-
-(defn right [p]
-  (let [[x y] p]
-    [(inc x) y]))
-
+(def adjacents [[0 1] [1 0] [-1 0] [0 -1]])
 (defn get-xy [m p]
   (get-in m (reverse p)))
 
+(defn add-points [a b]
+  (let [[xa ya] a [xb yb] b]
+    [(+ xa xb) (+ ya yb)]))
+
 (defn get-adjacent [m p]
-  (remove #(nil? (get-xy m %)) [(above p) (below p) (left p) (right p)]))
+  (remove #(nil? (get-xy m %)) (map #(add-points p %) adjacents)))
 
 (defn higher-adjacents [m p s]
   (remove #(or (= 9 (get-xy m %)) (scontains? s %)) (get-adjacent m p)))
@@ -428,9 +421,382 @@
     (println (sum (map char-score (filter string? diagnoses))))
     (println (->> diagnoses (remove string?) (map stack-score) sort middle))))
 
+(defn map-grid [f grid]
+  (mapv #(mapv f %) grid))
+
+(defn map-coords [f grid]
+  (map-indexed #(map-indexed (fn [x y] (f %1 x y)) %2) grid))
+
+(def surr [[0 1] [1 0] [-1 0] [0 -1] [-1 -1] [1 1] [1 -1] [-1 1]])
+
+(defn outside-bounds-pred [grid]
+  (fn [p] (nil? (get-in grid p))))
+
+(defn get-surrounding-coords [p grid]
+  (let [[x y] p
+        pred (outside-bounds-pred grid)]
+    [[x (inc y)]]
+    (remove pred (map #(add-points p %) surr))))
+
+(defn expand-flashes [coll grid]
+  (mapcat #(get-surrounding-coords % grid) coll))
+
+(defn get-flash-coords [grid already-flashed]
+  (remove #(scontains? already-flashed %)
+          (remove nil? (apply concat (map-coords #(if (> %3 9) [%1 %2] nil) grid)))))
+
+(defn process-flashes [already-flashed grid]
+  (let [new-flashes (get-flash-coords grid already-flashed)
+        new-grid (reduce #(update-in %1 %2 inc) grid (expand-flashes new-flashes grid))]
+    (if (empty? new-flashes)
+      (list already-flashed new-grid)
+      (process-flashes (into already-flashed new-flashes) new-grid))))
+
+(defn set-flashed [grid val]
+  (map-grid #(if (> % 9) val %) grid))
+
+(defn step-octopi [input-list]
+  (let [[energy-map flash-count] input-list
+        new-energies (map-grid inc energy-map)
+        [flashed newgrid] (process-flashes #{} new-energies)
+        finalgrid (set-flashed newgrid 0)]
+    (list finalgrid (+ (count flashed) flash-count))))
+
+(defn sum-grid [g] (sum (map sum g)))
+
+(defn get-first-index [pred coll]
+  (first (keep-indexed (fn [i x] (if (pred x) i)) coll)))
+
+(defn all-flashed-index [r]
+  (get-first-index #(= 0 (sum-grid (first %))) r))
+
+(defn problem11 [input]
+  (let [grid (read-heightmap (str/trim input))]
+    (println (second (nth (iterate step-octopi (list grid 0)) 100)))
+    (println (all-flashed-index (iterate step-octopi (list grid 0))))))
+
+(defn is-small-cave? [cave]
+  (= (str/lower-case cave) cave))
+
+(defn parse-cave [cave-lines]
+  (reduce (fn [m [k v]]
+            (update (update m k (fnil conj []) v) v (fnil conj []) k))
+          {} (map #(str/split % #"-") cave-lines)))
+
+(defn twice-visitable? [cave]
+  (not (= cave "start")))
+
+(defn traverse-cave [start end cave-map small-caves-visited twice-visited-cave]
+  (let [adjacent-caves (get cave-map start)
+        new-visited-set (if (is-small-cave? start) (conj small-caves-visited start) small-caves-visited)]
+    (if (= start end) 1
+                      (+ (sum (map #(traverse-cave % end cave-map new-visited-set twice-visited-cave)
+                                   (remove (partial scontains? new-visited-set) adjacent-caves)))
+                         (if (nil? twice-visited-cave)
+                           (sum (map #(traverse-cave % end cave-map new-visited-set %)
+                                     (remove #(not (scontains? new-visited-set %)) (filter twice-visitable? adjacent-caves))))
+                           0)))))
+
+(defn problem12 [input]
+  (let [cave-lines (->> input str/trim str/split-lines)
+        cave (parse-cave cave-lines)]
+    (println (traverse-cave "start" "end" cave #{} :dummy))
+    (println (traverse-cave "start" "end" cave #{} nil))))
+
+(defn is-whitespace? [input]
+  (re-matches #"\s*" input))
+
+(def is-not-whitespace? (complement is-whitespace?))
+
+(defn parse-fold-instruction [input]
+  (if (str/includes? input "x")
+    [:x (parse-int (str/replace input "fold along x=" ""))]
+    [:y (parse-int (str/replace input "fold along y=" ""))]))
+
+(defn reflect-point [point fold]
+  (let [[x y] point
+        [dir fold-dist] fold]
+    (if (= dir :x)
+      [(min x (- fold-dist (dist x fold-dist))) y]
+      [x (min y (- fold-dist (dist y fold-dist)))])))
+
+(defn print-points [points]
+  (let [max-x (inc (reduce max (map first points)))
+        max-y (inc (reduce max (map second points)))]
+    (str/join "\n" (for [y (range max-y)]
+                     (str/join (map #(if (scontains? points [% y]) "#" ".") (range max-x)))))))
+
+(defn fold-paper [paper fold]
+  (into #{} (map #(reflect-point % fold) paper)))
+
+(defn parse-point [line]
+  (vec (map parse-int (str/split line #","))))
+
+(defn read-dots [input-lines]
+  (into #{} (map parse-point input-lines)))
+
+(defn read-p13-input [input]
+  (let [lines (str/split-lines (str/trim input))
+        dots-input (take-while is-not-whitespace? lines)
+        folding-input (next (drop-while is-not-whitespace? lines))]
+    [(read-dots dots-input)
+     (map parse-fold-instruction folding-input)]))
+
+(defn problem13 [input]
+  (let [[dots folds] (read-p13-input input)]
+    (println (count (fold-paper dots (first folds))))
+    (println (print-points (reduce fold-paper dots folds)))))
+
+(defn read-polymer-template [lines]
+  (into {} (map #(str/split % #" -> ") lines)))
+
+(defn merge-polymer [orig new]
+  (remove nil? (map #(if (even? %) (nth orig (/ % 2) nil)
+                                   (nth new (/ % 2) nil)) (range (* 2 (count orig))))))
+
+(defn read-p14-input [input]
+  (let [lines (str/split-lines (str/trim input))]
+    [(first lines) (read-polymer-template (drop 2 lines))]))
+
+(defn analyze-p14-result [freqs]
+  (let [maxel (apply max (vals freqs))
+        minel (apply min (vals freqs))]
+    (- maxel minel)))
+
+(defn merge-freqs [f1 f2]
+  (into f1 (map #(vector % (+ (get f2 %) (get f1 % 0))) (keys f2))))
+
+(def evolve-freqs
+  (memoize
+    (fn [l i t]
+      (let [[lettera letterb] l
+            lookup-str (str/join [lettera letterb])
+            middle-letter (get t lookup-str)]
+        (if (= i 0)
+          (if (= lettera letterb)
+            {lettera 2}
+            {lettera 1 letterb 1})
+          (update (merge-freqs (evolve-freqs [lettera middle-letter] (dec i) t)
+                               (evolve-freqs [middle-letter letterb] (dec i) t))
+                  middle-letter
+                  dec))))
+    ))
+
+(defn get-iteration-evolved-polymer [n polymer template]
+  (let [groups (partition 2 1 (str-to-chars polymer))
+        freqs (map #(evolve-freqs % n template) groups)
+        middle-letters (map first groups)
+        middle-letter-freq-pairs (map vector freqs middle-letters)]
+    (reduce #(update (merge-freqs %1 (first %2)) (second %2) dec)
+            (first freqs)
+            (drop 1 middle-letter-freq-pairs))))
+
+
+(defn problem14 [input]
+  (let [[polymer template] (read-p14-input input)]
+    (println (analyze-p14-result (get-iteration-evolved-polymer 10 polymer template)))
+    (println (analyze-p14-result (get-iteration-evolved-polymer 40 polymer template)))))
+
+
+(defn find-end-pos [cave-map]
+  [(dec (count (first cave-map))) (dec (count cave-map))])
+
+
+(defn unvisited-neighbors [point visited grid]
+  (remove #(contains? visited %) (get-adjacent grid point)))
+
+(defn show-distances [distances end-pos]
+  (let [[width height] end-pos]
+    (str/join "\n" (map (fn [y]
+                          (str/join "" (map #(format "%5s" (get distances [% y])) (range (inc width)))))
+                        (range (inc height))))))
+
+(defn make-heap [distances]
+  (into (sorted-set) (map #(vector %1 %2) (vals distances) (keys distances))))
+
+(defn dijkstra-distance [cave-map start-pos end-pos]
+  (let [[end-x end-y] (map inc end-pos)
+        unvisited-init (into [] (gen-points end-x end-y))
+        distance-map-init (assoc (into {} (map #(vector % ##Inf) unvisited-init)) start-pos 0)]
+    (loop [unvisited (make-heap distance-map-init)
+           visited #{}
+           current-node start-pos
+           neighbors (into [] (unvisited-neighbors start-pos visited cave-map))
+           distances distance-map-init
+           n 0]
+      (cond
+        (or (contains? visited end-pos) (and (= current-node end-pos) (empty? unvisited))) (get distances end-pos)
+        (empty? neighbors) (let [[_ new-node] (first unvisited)
+                                 new-unvisited (disj unvisited [_ new-node])
+                                 new-visited (conj visited current-node)]
+                             (recur new-unvisited
+                                    (conj visited current-node)
+                                    new-node
+                                    (unvisited-neighbors new-node new-visited cave-map)
+                                    distances
+                                    (inc n)))
+        :else (let [this-neighbor (first neighbors)
+                    current-distance (get distances this-neighbor)
+                    this-distance (min current-distance (+ (get distances current-node) (get-xy cave-map this-neighbor)))
+                    new-distances (assoc distances this-neighbor this-distance)]
+                (recur (conj (disj unvisited [current-distance this-neighbor]) [this-distance this-neighbor])
+                       visited
+                       current-node
+                       (next neighbors)
+                       new-distances
+                       (inc n)))))))
+
+(defn staircase [m n]
+  (flatten (map #(repeat m %) (range n))))
+
+(defn cave-sum-inc-rotate [n]
+  (inc (mod (- n 1) 9)))
+
+
+(defn expand-p15-input [grid n]
+  (mapv #(mapv (fn [i x] (cave-sum-inc-rotate (+ i x %2))) (take (* n (count %1)) (cycle %1)) (staircase (count %1) n))
+        (take (* n (count grid)) (cycle grid)) (staircase (count grid) n)))
+
+
+(defn problem15 [input]
+  (let [cave-map (->> input str/trim read-heightmap)
+        expanded-cave-map (expand-p15-input cave-map 5)]
+    (println (dijkstra-distance cave-map [0 0] (find-end-pos cave-map)))
+    (println (dijkstra-distance expanded-cave-map [0 0] (find-end-pos expanded-cave-map)))))
+
+(def hex-to-bits
+  {"0" '(0 0 0 0)
+   "1" '(0 0 0 1)
+   "2" '(0 0 1 0)
+   "3" '(0 0 1 1)
+   "4" '(0 1 0 0)
+   "5" '(0 1 0 1)
+   "6" '(0 1 1 0)
+   "7" '(0 1 1 1)
+   "8" '(1 0 0 0)
+   "9" '(1 0 0 1)
+   "A" '(1 0 1 0)
+   "B" '(1 0 1 1)
+   "C" '(1 1 0 0)
+   "D" '(1 1 0 1)
+   "E" '(1 1 1 0)
+   "F" '(1 1 1 1)})
+
+(defn bits-to-int-r [input-bits i]
+  (if (nil? input-bits) 0
+                        (+ (* i (first input-bits))
+                           (bits-to-int-r (next input-bits) (* 2 i))))
+  )
+
+(defn bits-to-int [input-bits]
+  (bits-to-int-r (reverse input-bits) 1))
+
+(defrecord packet [version id sub-packets value])
+
+(defn parse-hex-to-bits [input-hex]
+  (mapcat hex-to-bits input-hex))
+
+(defn carve-bits-to-int [n bits]
+  (list (bits-to-int (take n bits)) (drop n bits)))
+
+(defn first-is-one [bits]
+  (= (first bits) 1))
+
+(defn read-literal-bits [input-bits]
+  (let [groups (partition 5 5 nil input-bits)
+        result (bits-to-int
+                 (concat (mapcat next (take-while first-is-one groups))
+                         (next (first (drop-while first-is-one groups)))))
+        rest (reduce concat (next (drop-while first-is-one groups)))]
+    (list result rest)))
+
+(defn parse-all-bits [input-bits bits-fn]
+  (if (empty? input-bits) nil
+                          (let [[p r] (bits-fn input-bits)]
+                            (conj (parse-all-bits r bits-fn) p))))
+
+(defn parse-n-packets [input-bits bits-fn n]
+  (if (zero? n) (list '() input-bits)
+                (let [[p r] (bits-fn input-bits)
+                      [next-list next-rest] (parse-n-packets r bits-fn (dec n))]
+                  (list (cons p next-list) next-rest))))
+
+(defn get-operator-fns [bit-fn]
+  (list
+    (fn [input-bits]
+      (let [[length rest] (carve-bits-to-int 15 input-bits)]
+        (list (parse-all-bits (take length rest) bit-fn)
+              (drop length rest))))
+    (fn [input-bits]
+      (let [[num-packets rest] (carve-bits-to-int 11 input-bits)]
+        (parse-n-packets rest bit-fn num-packets)))))
+
+(defn read-operator-bits [input-bits bit-fn]
+  (let [[length-id rest-length-id] (carve-bits-to-int 1 input-bits)]
+    ((nth (get-operator-fns bit-fn) length-id) rest-length-id)))
+
+(defn parse-bits [input-bits]
+  (let [[version rest-version-bits] (carve-bits-to-int 3 input-bits)
+        [packet-id rest-id-bits] (carve-bits-to-int 3 rest-version-bits)
+        [packet-result rest] (case packet-id
+                               4 (let
+                                   [[result rest] (read-literal-bits rest-id-bits)]
+                                   (list (->packet version packet-id nil result) rest))
+                               (let [[result rest] (read-operator-bits rest-id-bits parse-bits)]
+                                 (list (->packet version packet-id result nil) rest)))]
+    (list packet-result rest)))
+
+(defn parse-packet [input-str]
+  (let [input-bits (->> input-str str-to-chars parse-hex-to-bits)]
+    (parse-bits input-bits)))
+
+(defn version-sum [packet]
+  (+ (:version packet) (sum (map version-sum (:sub-packets packet)))))
+
+(defn bool-to-int [b] (if b 1 0))
+
+(defn eval-packet [packet]
+  (let [subpacket-values (map eval-packet (:sub-packets packet))]
+    (case (:id packet)
+     4 (:value packet)
+     0 (sum subpacket-values)
+     1 (reduce * subpacket-values)
+     2 (apply min subpacket-values)
+     3 (apply max subpacket-values)
+     5 (bool-to-int (apply > subpacket-values))
+     6 (bool-to-int (apply < subpacket-values))
+     7 (bool-to-int (apply = subpacket-values)))))
+
+(defn print-packet [p n]
+  (print (str/join "" (repeat n " ")))
+  (println (:id p) (:value p) (count (:sub-packets p)))
+  (doall (for [pa (:sub-packets p)] (print-packet pa (+ n 2)))))
+
+(defn problem16 [input]
+  (let [input-str (str/trim input)
+        [p, _] (parse-packet input-str)]
+    (println (version-sum p))
+    (println (eval-packet p))))
+
+(defn problem17 [input]
+  )
+
+(defn problem18 [input])
+(defn problem19 [input])
+(defn problem20 [input])
+(defn problem21 [input])
+(defn problem22 [input])
+(defn problem23 [input])
+(defn problem24 [input])
+(defn problem25 [input])
+
 (let [functions [problem1 problem2 problem3 problem4
                  problem5 problem6 problem7 problem8
-                 problem9 problem10]]
+                 problem9 problem10 problem11 problem12
+                 problem13 problem14 problem15 problem16
+                 problem17 problem18 problem19 problem20
+                 problem21 problem22 problem23 problem24
+                 problem25]]
   (defn -main
     []
     (print "Enter problem to solve: ")
